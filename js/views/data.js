@@ -86,8 +86,8 @@ export function render() {
   /* Textimport */
 
   const textArea = h('textarea', {
-    placeholder: '17.09.2026 Oberkörper\nBeinpresse 80x12, 80x12, 90x10\nLatzug 3x10 @ 55',
-    style: { minHeight: '140px', fontFamily: 'ui-monospace, monospace', fontSize: '14px' },
+    placeholder: '21.05.2026\nAbductor Leg Extension\n45 kg x 15\n55 kg x 15\n65 kg x 15',
+    style: { minHeight: '160px', fontFamily: 'ui-monospace, monospace', fontSize: '14px' },
   });
   const report = h('div.small.dim');
 
@@ -95,8 +95,10 @@ export function render() {
     h('div.section-title', 'Alte Textdatei übernehmen'),
     h('div.card',
       h('p.small.dim', { style: { marginTop: '0' } },
-        'Füge den Inhalt deiner bisherigen Trainings-Textdatei ein. Erkannt werden ' +
-        'Datumszeilen sowie Sätze wie „80x12“, „80 kg x 12“ oder „3x10 @ 55“.'),
+        'Füge den Inhalt deiner bisherigen Trainings-Notiz ein. Eine Datumszeile ' +
+        'startet ein Training, eine Zeile ohne Zahl am Anfang ist der Name der ' +
+        'Übung, jede Zeile wie „45 kg x 15“ ist ein Satz. Nachgestellte Striche ' +
+        'werden ignoriert.'),
       textArea,
       h('button.btn.btn--ghost.btn--block', {
         type: 'button',

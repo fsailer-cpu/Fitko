@@ -131,9 +131,13 @@ wäre ein kleiner Server oder iCloud nötig.
 
 **Keine Apple Watch und kein HealthKit.** Technisch für Web-Apps nicht erreichbar.
 
-**Der Textimport rät.** Der Parser versteht die gängigen Schreibweisen
-(`80x12`, `3x10 @ 55`, `60 kg x 8`). Weicht die bestehende Datei davon ab, muss
-`js/textio.js` angepasst werden — das sind wenige Zeilen.
+**Der Textimport ist auf die vorhandene Notiz zugeschnitten.** Er liest genau
+das bisher benutzte Layout (Datumszeile, Übungsname auf eigener Zeile, darunter
+je Zeile ein Satz `45 kg x 15`, nachgestellte Striche werden ignoriert) und
+zusätzlich die verbreiteten Einzeiler `80x12` und `3x10 @ 55`. Zeilen, die zu
+nichts passen, werden nicht verschluckt, sondern nach dem Import aufgelistet.
+Offen ist, was der nachgestellte Strich in der bisherigen Datei bedeutet — er
+wird derzeit verworfen.
 
 ## 6. Mögliche nächste Schritte
 
@@ -150,9 +154,17 @@ Nach Nutzen sortiert, keiner davon ist Voraussetzung für den Alltagsbetrieb:
 
 ## 7. Prüfung
 
-`tests/e2e.mjs` spielt den gesamten Ablauf in einem echten Browser mit
-iPhone-Abmessungen durch: Training anlegen, Maschinen hinzufügen, Gewicht per
-Taste und per Eingabe ändern, Sätze ergänzen und abhaken, Training abschließen,
-daraus ein neues Training erzeugen und prüfen, dass die Werte übernommen und die
-Haken zurückgesetzt sind; dazu Reihenfolge ändern, löschen, Textimport und
-Datenerhalt nach Neustart. Alle 18 Schritte laufen grün.
+Zwei Ebenen, beide über `npm test`:
+
+- `tests/textio.test.mjs` prüft den Parser gegen die reale Trainingsnotiz:
+  Titelzeile, Datum, sechs Übungen mit ihren Sätzen, nachgestellte Striche,
+  mehrere Trainings in einer Datei, Übungsnamen die mit einer Zahl beginnen,
+  und den Rundlauf Export → Import. 10 Tests.
+- `tests/e2e.mjs` spielt den gesamten Ablauf in einem echten Browser mit
+  iPhone-Abmessungen durch: Training anlegen, Maschinen hinzufügen, Gewicht per
+  Taste und per Eingabe ändern, Sätze ergänzen und abhaken, Training abschließen,
+  daraus ein neues Training erzeugen und prüfen, dass die Werte übernommen und
+  die Haken zurückgesetzt sind; dazu Reihenfolge ändern, löschen, Textimport der
+  echten Notiz und Datenerhalt nach Neustart. 19 Schritte.
+
+Alles grün.

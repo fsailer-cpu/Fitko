@@ -154,21 +154,44 @@ await step('Textimport', async () => {
   await page.locator('.tabbar a[href="#/daten"]').click();
   await page.waitForSelector('textarea');
   page.once('dialog', (d) => d.accept());
-  await page.locator('textarea').fill('01.08.2026 Beine\nBeinpresse 100x10, 100x10\nWadenheben 3x12 @ 40');
+  await page.locator('textarea').fill([
+    'Training Fitko',
+    '21.05.2026',
+    'Abductor Leg Extension Oberschenkel',
+    '45 kg x 15',
+    '55 kg x 15',
+    '65 kg x 15 -',
+    '',
+    'Triceps hoch',
+    '15 kg x 15',
+    '20 kg x 13',
+  ].join('\n'));
   await page.getByRole('button', { name: 'Text einlesen' }).click();
   await page.waitForTimeout(300);
   const txt = await page.locator('#view').textContent();
   if (!txt.includes('1 Trainings importiert')) throw new Error('Import-Report fehlt: ' + txt.slice(0, 200));
+  if (txt.includes('⚠︎')) throw new Error('unerwartete Hinweise: ' + txt.slice(0, 300));
 });
 
 await step('Import landet im Verlauf', async () => {
   await page.locator('.tabbar a[href="#/"]').click();
-  await page.waitForTimeout(200);
+  await page.waitForSelector('#view a.card--tap');
   const txt = await page.locator('#view').textContent();
-  if (!txt.includes('Beine')) throw new Error('importiertes Training fehlt');
+  if (!txt.includes('Training Fitko')) throw new Error('importiertes Training fehlt');
+  if (!txt.includes('21.05.2026')) throw new Error('Datum nicht übernommen');
+  if (!txt.includes('2 Übungen · 5/5 Sätze')) throw new Error('Übungen/Sätze falsch: ' + txt.slice(0, 300));
+});
+
+await step('importierte Übung erscheint im Fortschritt', async () => {
+  await page.locator('.tabbar a[href="#/uebungen"]').click();
+  await page.waitForSelector('text=Triceps hoch');
+  await page.getByRole('link', { name: /Triceps hoch/ }).click();
+  const txt = await page.locator('#view').textContent();
+  if (!txt.includes('20 kg')) throw new Error('Bestwert 20 kg fehlt: ' + txt.slice(0, 200));
 });
 
 await step('Neustart behält Daten (localStorage)', async () => {
+  await page.goto(BASE + '#/');
   await page.reload();
   await page.waitForSelector('#view .card, #view .btn');
   const txt = await page.locator('#view').textContent();

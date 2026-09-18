@@ -51,11 +51,13 @@ Cloudflare Pages oder Vercel (alle mit kostenlosem Tarif für statische Seiten).
 
 ```bash
 npm start          # http://localhost:8080
-npm test           # End-to-End-Test im Browser (benötigt playwright)
+npm test           # Parser-Tests + End-to-End-Test im Browser
+npm run test:unit  # nur die Parser-Tests, ohne Browser
 npm run icons      # Icons neu erzeugen (benötigt python3)
 ```
 
-Für `npm test` einmalig `npm install` ausführen.
+`npm run test:unit` läuft ohne weitere Abhängigkeiten. Für den
+End-to-End-Test einmalig `npm install` ausführen (installiert Playwright).
 
 ## Aufbau
 
@@ -71,25 +73,43 @@ js/dom.js             Kleine DOM-Helfer statt Framework
 js/views/             Je Bildschirm eine Datei
 sw.js                 Service Worker für den Offline-Betrieb
 tools/make-icons.py   Erzeugt die App-Icons ohne externe Bibliotheken
+tests/textio.test.mjs Prüft den Parser gegen die bisherige Trainingsnotiz
 tests/e2e.mjs         Durchspielt den kompletten Ablauf im echten Browser
 ```
 
 ## Format für den Textimport
 
 Unter **Daten → Alte Textdatei übernehmen** lässt sich der Inhalt der bisherigen
-Datei einfügen. Erkannt wird:
+Notiz einfügen. Gelesen wird genau das bisher verwendete Layout:
 
 ```
-17.09.2026 Oberkörper
-Beinpresse 80x12, 80x12, 90x10
-Latzug 3x10 @ 55
-Bankdrücken 60 kg x 8
-# Notiz: Schulter zwickt
+Training Fitko
+21.05.2026
+Abductor Leg Extension Oberschenkel
+45 kg x 15
+55 kg x 15
+65 kg x 15 -
+
+Oberarme zu sich ziehen
+35 kg x 12
+45 kg x 10
 ```
 
-- Eine Zeile, die mit einem Datum beginnt (`17.09.2026` oder `2026-09-17`),
-  startet ein neues Training; der Rest der Zeile ist der Name.
-- `80x12` heißt 80 kg mit 12 Wiederholungen.
-- `3x10 @ 55` heißt drei Sätze à 10 Wiederholungen mit 55 kg.
+Die Regeln:
 
-Weicht deine Datei davon ab, lässt sich der Parser in `js/textio.js` anpassen.
+- Zeilen **vor dem ersten Datum** sind der Titel der Datei und werden zum Namen
+  der Trainings.
+- Eine **Datumszeile** (`21.05.2026` oder `2026-05-21`) startet ein neues
+  Training; steht dahinter noch Text, wird das der Name.
+- Eine Zeile, die **nicht mit einer Zahl beginnt**, ist der Name einer Übung.
+- Eine Zeile wie `45 kg x 15` ist ein **Satz** der zuletzt genannten Übung.
+- **Nachgestellte Striche** (`65 kg x 15 -`) werden ignoriert.
+- Leerzeilen trennen nur optisch und werden übersprungen.
+
+Zusätzlich verstanden, weil verbreitet: `Beinpresse 80x12, 80x12, 90x10` (Name
+und Sätze in einer Zeile) und `Latzug 3x10 @ 55` (drei Sätze à 10 Wiederholungen
+mit 55 kg). Zeilen, die zu nichts passen, werden nicht verschluckt, sondern
+nach dem Import als Hinweis aufgelistet.
+
+Der Textexport erzeugt wieder genau dieses Layout, lässt sich also erneut
+einlesen.
