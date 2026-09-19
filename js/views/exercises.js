@@ -5,7 +5,7 @@ import { getState } from '../store.js';
 import { refresh } from '../router.js';
 import {
   allExerciseNames, exerciseHistory, rememberExercise, deleteCatalogEntry,
-  formatDate, formatWeight, summarizeSets,
+  formatDate, formatWeight, summarizeSets, formatSeconds,
 } from '../model.js';
 
 export function renderList() {
@@ -51,7 +51,10 @@ export function renderList() {
     const hits = names.filter((n) => !q || n.toLowerCase().includes(q));
     list.replaceChildren(...hits.map((name) => {
       const history = exerciseHistory(name);
-      const best = history.reduce((m, e) => Math.max(m, e.topWeight), 0);
+      const timed = history[0]?.kind === 'time';
+      const best = timed
+        ? formatSeconds(history.reduce((m, e) => Math.max(m, e.topSeconds), 0))
+        : formatWeight(history.reduce((m, e) => Math.max(m, e.topWeight), 0));
       const catalogEntry = getState().catalog.find((c) => c.name.toLowerCase() === name.toLowerCase());
       const unused = history.length === 0;
 
@@ -63,7 +66,7 @@ export function renderList() {
           },
             h('div.strong.truncate', name),
             h('div.small.dim', history.length
-              ? `${history.length}× trainiert · Bestwert ${formatWeight(best)}`
+              ? `${history.length}× trainiert · Bestwert ${best}`
               : 'noch nicht trainiert')),
           unused && catalogEntry
             ? h('button.btn.btn--sm.btn--danger', {
@@ -95,13 +98,19 @@ export function renderDetail({ name }) {
     return { title: name, back: '#/uebungen', body };
   }
 
-  const best = history.reduce((m, e) => Math.max(m, e.topWeight), 0);
-  const maxVolume = history.reduce((m, e) => Math.max(m, e.volume), 0) || 1;
+  // Halteübungen werden über die Zeit ausgewertet, nicht über kg-Volumen.
+  const timed = history[0].kind === 'time';
+  const metric = (entry) => (timed ? entry.holdTime : entry.volume);
+  const formatMetric = (value) => (timed ? formatSeconds(value) : formatWeight(value));
+  const best = timed
+    ? formatSeconds(history.reduce((m, e) => Math.max(m, e.topSeconds), 0))
+    : formatWeight(history.reduce((m, e) => Math.max(m, e.topWeight), 0));
+  const maxMetric = history.reduce((m, e) => Math.max(m, metric(e)), 0) || 1;
 
   body.append(h('div.card',
     h('div.row.row--between',
-      h('span.dim.small', 'Bestes Gewicht'),
-      h('span.strong', formatWeight(best))),
+      h('span.dim.small', timed ? 'Längste Zeit' : 'Bestes Gewicht'),
+      h('span.strong', best)),
     h('div.row.row--between', { style: { marginTop: '4px' } },
       h('span.dim.small', 'Einheiten'),
       h('span.strong', String(history.length))),
@@ -111,14 +120,15 @@ export function renderDetail({ name }) {
   ));
 
   body.append(
-    h('div.section-title', 'Volumen je Einheit'),
+    h('div.section-title', timed ? 'Haltezeit je Einheit' : 'Volumen je Einheit'),
     h('div.card',
       h('div.bars', ...history.slice(0, 12).reverse().map((entry) => h('div.bar',
-        h('span.dim', formatDate(entry.date).replace(/^\w+,?\s*/, '')),
+        // Wochentag abschneiden: alles bis zur ersten Ziffer ("Sa., 19.09." -> "19.09.").
+        h('span.dim', formatDate(entry.date).replace(/^\D*/, '')),
         h('div.bar__track', h('div.bar__fill', {
-          style: { width: `${Math.max(3, Math.round((entry.volume / maxVolume) * 100))}%` },
+          style: { width: `${Math.max(3, Math.round((metric(entry) / maxMetric) * 100))}%` },
         })),
-        h('span.dim', formatWeight(entry.volume)),
+        h('span.dim', formatMetric(metric(entry))),
       )))),
   );
 
@@ -129,8 +139,8 @@ export function renderDetail({ name }) {
         h('div.grow',
           h('div.strong.small', formatDate(entry.date)),
           h('div.small.dim.truncate', entry.workoutName)),
-        h('span.badge', formatWeight(entry.topWeight))),
-      h('div.small.dim', { style: { marginTop: '6px' } }, summarizeSets(entry.sets)),
+        h('span.badge', timed ? formatSeconds(entry.topSeconds) : formatWeight(entry.topWeight))),
+      h('div.small.dim', { style: { marginTop: '6px' } }, summarizeSets(entry.sets, entry.kind)),
     )));
 
   return { title: name, back: '#/uebungen', body };

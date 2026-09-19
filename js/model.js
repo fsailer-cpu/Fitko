@@ -32,6 +32,23 @@ export function formatWeight(kg) {
   return `${Number.isInteger(n) ? n : n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')} kg`;
 }
 
+/** Sekunden als mm:ss, Minuten laufen bei langen Zeiten einfach weiter. */
+export function formatSeconds(total) {
+  const n = Math.max(0, Math.round(Number(total) || 0));
+  return `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+}
+
+/** Liest "1:30", "01:30" oder "90" als Sekunden. */
+export function parseSeconds(text) {
+  const raw = String(text ?? '').trim();
+  if (!raw) return 0;
+  const parts = raw.split(':');
+  if (parts.length === 1) return Math.max(0, Math.round(Number(parts[0]) || 0));
+  const min = Math.max(0, Math.round(Number(parts[0]) || 0));
+  const sec = Math.max(0, Math.round(Number(parts[1]) || 0));
+  return min * 60 + sec;
+}
+
 export function formatDuration(ms) {
   if (!ms || ms < 0) return '';
   const min = Math.round(ms / 60000);
@@ -49,11 +66,13 @@ export function formatDuration(ms) {
  * 'reserve' – noch Luft, nächstes Mal zulegen  (in der Textdatei: +)
  * null      – nicht beurteilt
  */
-export function makeSet(weight = 0, reps = 10, effort = null) {
+export function makeSet(weight = 0, reps = 10, effort = null, seconds = 0) {
   return {
     id: uid(),
     weight: Number(weight) || 0,
     reps: Number(reps) || 0,
+    // Nur bei Übungen mit kind === 'time' relevant.
+    seconds: Number(seconds) || 0,
     done: false,
     effort: EFFORTS.includes(effort) ? effort : null,
   };
@@ -79,21 +98,57 @@ export function nextEffort(effort) {
   return EFFORT_CYCLE[(i + 1) % EFFORT_CYCLE.length];
 }
 
-export function makeExercise(name = '', sets = null) {
+/**
+ * `kind` bestimmt, was je Satz gezählt wird:
+ * 'reps' – Wiederholungen (Standard)
+ * 'time' – Haltedauer in Sekunden, angezeigt als mm:ss (Plank & Co.)
+ * Das Gewicht bleibt in beiden Fällen ein normales Gewichtsfeld; bei
+ * Halteübungen trägt man dort sein Körpergewicht bzw. Zusatzgewicht ein.
+ */
+export function makeExercise(name = '', sets = null, kind = 'reps') {
+  const timed = kind === 'time';
   return {
     id: uid(),
     name,
+    kind: timed ? 'time' : 'reps',
     note: '',
-    sets: sets && sets.length ? sets : [makeSet(0, 10)],
+    sets: sets && sets.length ? sets : [timed ? makeSet(0, 0, null, 60) : makeSet(0, 10)],
   };
 }
 
+export function isTimed(exercise) {
+  return exercise?.kind === 'time';
+}
+
+export const TIME_STEP = 5;
+
 /** Gesamtvolumen (Gewicht × Wiederholungen) über alle gewerteten Sätze. */
 export function volumeOf(exercise, onlyDone = false) {
+  // Halteübungen haben kein sinnvolles kg-Volumen (85 kg × 90 s wäre keine
+  // mit Wiederholungen vergleichbare Zahl). Sie werden über die Haltezeit
+  // ausgewiesen und bleiben hier außen vor.
+  if (isTimed(exercise)) return 0;
   return exercise.sets.reduce((sum, s) => {
     if (onlyDone && !s.done) return sum;
     return sum + (Number(s.weight) || 0) * (Number(s.reps) || 0);
   }, 0);
+}
+
+/** Summe der Haltedauer einer Übung in Sekunden. */
+export function holdTimeOf(exercise, onlyDone = false) {
+  if (!isTimed(exercise)) return 0;
+  return exercise.sets.reduce((sum, s) => {
+    if (onlyDone && !s.done) return sum;
+    return sum + (Number(s.seconds) || 0);
+  }, 0);
+}
+
+export function workoutHoldTime(workout, onlyDone = false) {
+  return workout.exercises.reduce((sum, ex) => sum + holdTimeOf(ex, onlyDone), 0);
+}
+
+export function hasTimedExercise(workout) {
+  return workout.exercises.some(isTimed);
 }
 
 export function workoutVolume(workout, onlyDone = false) {
@@ -107,18 +162,33 @@ export function workoutSetCount(workout) {
 }
 
 /** Kurzfassung à la "3 × 80 kg" bzw. "80/80/90 kg" für Listen. */
-export function summarizeSets(sets) {
+export function summarizeSets(sets, kind = 'reps') {
   if (!sets.length) return '–';
   const mark = (s) => (s.effort ? ` ${EFFORT_SIGN[s.effort]}` : '');
   const weights = sets.map((s) => Number(s.weight) || 0);
-  const reps = sets.map((s) => Number(s.reps) || 0);
   const sameWeight = weights.every((w) => w === weights[0]);
-  const sameReps = reps.every((r) => r === reps[0]);
   const marks = sets.map(mark).filter(Boolean).join('');
+
+  if (kind === 'time') {
+    const secs = sets.map((s) => Number(s.seconds) || 0);
+    const sameTime = secs.every((x) => x === secs[0]);
+    if (sameWeight && sameTime) {
+      return `${sets.length} × ${formatSeconds(secs[0])} @ ${formatWeight(weights[0])}${marks}`;
+    }
+    return sets.map((s) => `${formatSeconds(s.seconds)}${mark(s)}`).join(' · ');
+  }
+
+  const reps = sets.map((s) => Number(s.reps) || 0);
+  const sameReps = reps.every((r) => r === reps[0]);
   if (sameWeight && sameReps) {
     return `${sets.length} × ${reps[0]} @ ${formatWeight(weights[0])}${marks}`;
   }
   return sets.map((s) => `${s.reps}×${formatWeight(s.weight)}${mark(s)}`).join(' · ');
+}
+
+/** Bequemer Aufruf, wenn die Übung selbst vorliegt. */
+export function summarizeExercise(exercise) {
+  return summarizeSets(exercise.sets, exercise.kind);
 }
 
 /* ------------------------------------------------------------------ */
@@ -175,8 +245,9 @@ export function startWorkout({ source = null, name = null } = {}) {
     w.exercises = source.exercises.map((ex) => ({
       id: uid(),
       name: ex.name,
+      kind: ex.kind === 'time' ? 'time' : 'reps',
       note: ex.note || '',
-      sets: ex.sets.map((s) => makeSet(s.weight, s.reps)),
+      sets: ex.sets.map((s) => makeSet(s.weight, s.reps, null, s.seconds)),
     }));
   }
   mutate((s) => {
@@ -186,7 +257,7 @@ export function startWorkout({ source = null, name = null } = {}) {
     });
     s.workouts.push(w);
   });
-  w.exercises.forEach((ex) => rememberExercise(ex.name));
+  w.exercises.forEach((ex) => rememberExercise(ex.name, ex.kind));
   return w;
 }
 
@@ -247,11 +318,17 @@ export function saveAsTemplate(workout, name) {
     exercises: workout.exercises.map((ex) => ({
       id: uid(),
       name: ex.name,
+      kind: ex.kind === 'time' ? 'time' : 'reps',
       note: ex.note || '',
       // Die Beurteilung (Limit/Reserve) gilt für die damalige Leistung und
       // wird bewusst nicht mitkopiert.
       sets: ex.sets.map((s) => ({
-        id: uid(), weight: s.weight, reps: s.reps, done: false, effort: null,
+        id: uid(),
+        weight: s.weight,
+        reps: s.reps,
+        seconds: Number(s.seconds) || 0,
+        done: false,
+        effort: null,
       })),
     })),
   };
@@ -277,12 +354,24 @@ export function renameTemplate(id, name) {
 /* ------------------------------------------------------------------ */
 
 /** Nimmt einen Übungsnamen in den Katalog auf, falls noch nicht vorhanden. */
-export function rememberExercise(name) {
+export function rememberExercise(name, kind = null) {
   const clean = (name || '').trim();
   if (!clean) return;
-  const exists = getState().catalog.some((c) => c.name.toLowerCase() === clean.toLowerCase());
-  if (exists) return;
-  mutate((s) => s.catalog.push({ id: uid(), name: clean, group: '' }));
+  const entry = getState().catalog.find((c) => c.name.toLowerCase() === clean.toLowerCase());
+  if (!entry) {
+    mutate((s) => s.catalog.push({
+      id: uid(), name: clean, group: '', kind: kind === 'time' ? 'time' : 'reps',
+    }));
+    return;
+  }
+  if (kind && entry.kind !== kind) mutate(() => { entry.kind = kind; });
+}
+
+/** Die zuletzt für diesen Namen benutzte Art – Katalog, sonst 'reps'. */
+export function catalogKind(name) {
+  const clean = (name || '').trim().toLowerCase();
+  const entry = getState().catalog.find((c) => c.name.toLowerCase() === clean);
+  return entry?.kind === 'time' ? 'time' : 'reps';
 }
 
 export function deleteCatalogEntry(id) {
@@ -330,7 +419,10 @@ export function exerciseHistory(name) {
           date: w.date,
           workoutName: w.name,
           sets: ex.sets,
+          kind: ex.kind === 'time' ? 'time' : 'reps',
           topWeight: Math.max(0, ...ex.sets.map((s) => Number(s.weight) || 0)),
+          topSeconds: Math.max(0, ...ex.sets.map((s) => Number(s.seconds) || 0)),
           volume: volumeOf(ex),
+          holdTime: holdTimeOf(ex),
         })));
 }

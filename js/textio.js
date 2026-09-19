@@ -17,9 +17,10 @@
 // Zusätzlich verstanden, weil verbreitet:
 //   Beinpresse 80x12, 80x12, 90x10     (Name und Sätze in einer Zeile)
 //   Latzug 3x10 @ 55                   (drei Sätze à 10 Wdh mit 55 kg)
+//   85 kg x 01:30                      (Haltedauer statt Wiederholungen)
 //   # Notiz: Schulter zwickt
 
-import { uid, todayISO, EFFORT_TEXT } from './model.js';
+import { uid, todayISO, EFFORT_TEXT, formatSeconds, parseSeconds } from './model.js';
 
 const DATE_DE = /^(\d{1,2})\.(\d{1,2})\.(\d{2,4})\s*$|^(\d{1,2})\.(\d{1,2})\.(\d{2,4})\s+(.*)$/;
 const DATE_ISO = /^(\d{4})-(\d{1,2})-(\d{1,2})\s*$|^(\d{4})-(\d{1,2})-(\d{1,2})\s+(.*)$/;
@@ -68,6 +69,34 @@ function parseSetChunk(chunk, effort = null) {
       // Die Beurteilung gilt dem zuletzt genannten Satz.
       effort: i === count - 1 ? effort : null,
     }));
+  }
+
+  // "85 kg x 01:30" – Haltedauer statt Wiederholungen
+  m = /^(\d+(?:[.,]\d+)?)\s*(?:kg)?\s*[x×*]\s*(\d{1,3}:[0-5]?\d)$/i.exec(chunk);
+  if (m) {
+    return [{
+      id: uid(), weight: num(m[1]), reps: 0,
+      seconds: parseSeconds(m[2]), done: true, effort, timed: true,
+    }];
+  }
+
+  // "3 x 01:30 @ 85" – mehrere Halte-Sätze
+  m = /^(\d+)\s*[x×*]\s*(\d{1,3}:[0-5]?\d)\s*@\s*(\d+(?:[.,]\d+)?)\s*(?:kg)?$/i.exec(chunk);
+  if (m) {
+    const count = Math.min(20, Number(m[1]));
+    return Array.from({ length: count }, (_, i) => ({
+      id: uid(), weight: num(m[3]), reps: 0, seconds: parseSeconds(m[2]),
+      done: true, effort: i === count - 1 ? effort : null, timed: true,
+    }));
+  }
+
+  // "01:30" oder "90 s" allein
+  m = /^(\d{1,3}:[0-5]?\d)$/.exec(chunk) || /^(\d+)\s*(?:s|sek|sec)$/i.exec(chunk);
+  if (m) {
+    return [{
+      id: uid(), weight: 0, reps: 0,
+      seconds: parseSeconds(m[1]), done: true, effort, timed: true,
+    }];
   }
 
   // "45 kg x 15", "80x12", "80 × 12 Wdh"
@@ -230,13 +259,19 @@ export function parseWorkoutText(text) {
     }
   });
 
-  // Übungen ohne einen einzigen Satz sind fast immer falsch gelesene Zeilen.
   workouts.forEach((w) => {
     w.exercises.forEach((ex) => {
+      // Übungen ohne einen einzigen Satz sind fast immer falsch gelesene Zeilen.
       if (!ex.sets.length) {
         warnings.push(`„${ex.name}“ hat keine Sätze`);
-        ex.sets.push({ id: uid(), weight: 0, reps: 0, done: false, effort: null });
+        ex.sets.push({ id: uid(), weight: 0, reps: 0, seconds: 0, done: false, effort: null });
       }
+      // Eine Übung gilt als Halteübung, sobald ein Satz eine Zeit trägt.
+      ex.kind = ex.sets.some((set) => set.timed) ? 'time' : 'reps';
+      ex.sets.forEach((set) => {
+        set.seconds = Number(set.seconds) || 0;
+        delete set.timed;
+      });
     });
   });
 
@@ -263,7 +298,8 @@ export function workoutsToText(workouts) {
       ex.name || 'Übung',
       ...ex.sets.map((s) => {
         const mark = EFFORT_TEXT[s.effort] ? ` ${EFFORT_TEXT[s.effort]}` : '';
-        return `${weightText(s.weight)} kg x ${s.reps}${mark}`;
+        const amount = ex.kind === 'time' ? formatSeconds(s.seconds) : s.reps;
+        return `${weightText(s.weight)} kg x ${amount}${mark}`;
       }),
     ].join('\n'));
     const head = w.name && w.name !== 'Training'

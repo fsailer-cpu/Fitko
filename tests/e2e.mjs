@@ -229,6 +229,103 @@ await step('Neustart behält Daten (localStorage)', async () => {
   if (!txt.includes('Oberkörper A')) throw new Error('Daten nach Reload weg');
 });
 
+await step('Plank auf Zeit umstellen', async () => {
+  await page.goto(BASE + '#/neu'); await page.waitForTimeout(200);
+  await page.getByRole('button', { name: 'Leeres Training starten' }).click();
+  const add = page.locator('input[placeholder="Maschine hinzufügen …"]');
+  await add.fill('Plank');
+  await page.getByRole('button', { name: 'Hinzufügen' }).click();
+
+  const ex = page.locator('.exercise').first();
+  const toggle = ex.locator('.kindtoggle');
+  if (await toggle.textContent() !== 'Wdh.') throw new Error('startet nicht bei Wiederholungen');
+  await toggle.click();
+  if (await toggle.textContent() !== 'Zeit') throw new Error('Umschalter greift nicht');
+
+  const time = ex.locator('.setrow').first().locator('.stepper').nth(1).locator('input');
+  if (await time.inputValue() !== '01:00') throw new Error('Startwert: ' + await time.inputValue());
+});
+
+await step('Zeit per Taste und per Eingabe ändern', async () => {
+  const ex = page.locator('.exercise').first();
+  const row = ex.locator('.setrow').first();
+  const time = row.locator('.stepper').nth(1).locator('input');
+  const plus = row.locator('.stepper').nth(1).getByRole('button', { name: 'Zeit erhöhen' });
+
+  await plus.click(); await plus.click();          // +10 s
+  if (await time.inputValue() !== '01:10') throw new Error('nach +: ' + await time.inputValue());
+
+  await time.fill('1:30'); await time.blur();
+  if (await time.inputValue() !== '01:30') throw new Error('nach Eingabe: ' + await time.inputValue());
+
+  await time.fill('90'); await time.blur();
+  if (await time.inputValue() !== '01:30') throw new Error('nackte Sekunden: ' + await time.inputValue());
+});
+
+await step('Gewicht bleibt bei Halteübungen normal nutzbar', async () => {
+  const weight = page.locator('.exercise').first().locator('.setrow').first()
+    .locator('.stepper').first().locator('input');
+  await weight.fill('85'); await weight.blur();
+  if (Number(await weight.inputValue()) !== 85) throw new Error('Körpergewicht nicht eintragbar');
+});
+
+await step('Haltezeit erscheint, kg-Volumen bleibt sauber', async () => {
+  const ex = page.locator('.exercise').first();
+  await ex.locator('.setrow').first().locator('.setdone').click();
+  await page.waitForTimeout(200);
+  const txt = await page.locator('#view').textContent();
+  if (!txt.includes('Haltezeit (erledigt)')) throw new Error('Haltezeit fehlt');
+  if (!txt.includes('01:30')) throw new Error('Haltezeit-Wert fehlt: ' + txt.slice(-300));
+  const volume = await page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem('fitko.state.v1'));
+    const w = state.workouts.find((x) => x.status === 'active');
+    return w.exercises.map((e) => [e.kind, e.sets[0].seconds, e.sets[0].weight]);
+  });
+  if (JSON.stringify(volume) !== JSON.stringify([['time', 90, 85]])) {
+    throw new Error('gespeicherter Zustand falsch: ' + JSON.stringify(volume));
+  }
+  if (txt.includes('7650 kg')) throw new Error('Zeit ist ins kg-Volumen geflossen');
+});
+
+await step('Art bleibt beim Übernehmen als Vorlage erhalten', async () => {
+  await page.getByRole('button', { name: '✓ Training abschließen' }).click();
+  await page.waitForFunction(() => location.hash === '#/' || location.hash === '');
+  await page.locator('.tabbar a[href="#/neu"]').click();
+  await page.waitForSelector('text=Letztes Training wiederholen');
+  await page.locator('button.card--tap').first().click();
+  await page.waitForSelector('input[placeholder="Maschine hinzufügen …"]');
+
+  const ex = page.locator('.exercise').first();
+  if (await ex.locator('.kindtoggle').textContent() !== 'Zeit') throw new Error('Art nicht übernommen');
+  const time = ex.locator('.setrow').first().locator('.stepper').nth(1).locator('input');
+  if (await time.inputValue() !== '01:30') throw new Error('Zeit nicht übernommen: ' + await time.inputValue());
+  const marked = await page.locator('.seteffort[data-effort]:not([data-effort=""])').count();
+  if (marked !== 0) throw new Error('Beurteilung hätte zurückgesetzt sein müssen');
+});
+
+await step('Plank wird beim nächsten Anlegen automatisch wieder Zeit', async () => {
+  const add = page.locator('input[placeholder="Maschine hinzufügen …"]');
+  await add.fill('Plank');
+  await page.getByRole('button', { name: 'Hinzufügen' }).click();
+  await page.waitForTimeout(200);
+  const last = page.locator('.exercise').last();
+  if (await last.locator('.kindtoggle').textContent() !== 'Zeit') {
+    throw new Error('Art wurde nicht aus der Historie übernommen');
+  }
+});
+
+await step('Fortschritt zeigt Zeit statt Gewicht', async () => {
+  await page.locator('.tabbar a[href="#/uebungen"]').click();
+  await page.waitForSelector('text=Plank');
+  await page.getByRole('link', { name: /^Plank/ }).first().click();
+  await page.waitForFunction(() => location.hash.startsWith('#/uebung/'));
+  await page.waitForSelector('.bars');
+  const txt = await page.locator('#view').textContent();
+  if (!txt.includes('Längste Zeit')) throw new Error('"Längste Zeit" fehlt: ' + txt.slice(0, 200));
+  if (!txt.includes('Haltezeit je Einheit')) throw new Error('Balkenüberschrift falsch');
+  if (!txt.includes('01:30')) throw new Error('Bestzeit fehlt');
+});
+
 await step('Übung verschieben und löschen', async () => {
   const names = () => page.locator('.exercise input[list]');
   await page.goto(BASE + '#/neu'); await page.waitForTimeout(200);

@@ -6,7 +6,7 @@ import { h, toast } from '../dom.js';
 import { getState } from '../store.js';
 import {
   sortedWorkouts, startWorkout, lastFinishedWorkout,
-  formatDate, summarizeSets,
+  formatDate, summarizeExercise,
 } from '../model.js';
 
 function begin(source, name) {
@@ -28,7 +28,7 @@ function sourceCard(source, subtitle, badge) {
     preview.length ? h('hr.divider') : null,
     ...preview.map((ex) => h('div.row.small',
       h('span.grow.truncate', ex.name || 'Ohne Namen'),
-      h('span.dim', summarizeSets(ex.sets)),
+      h('span.dim', summarizeExercise(ex)),
     )),
     source.exercises.length > preview.length
       ? h('div.small.dim', { style: { marginTop: '6px' } },

@@ -19,6 +19,12 @@ Die Analyse der Umsetzungsvarianten und die Begründung der Architektur stehen i
   Standard 2,5 kg) und Wiederholungen; die Zahl lässt sich auch direkt eingeben.
 - **„Letztes Mal"-Hinweis** – bei jeder Maschine steht, was du dort zuletzt
   geschafft hast, plus ein Knopf, der genau diese Sätze übernimmt.
+- **Zeit statt Wiederholungen** – für Plank und ähnliche Halteübungen: ein Tipp
+  auf die Spaltenüberschrift „Wdh." stellt die Übung auf **mm:ss** um, die
+  ± Tasten gehen dann in 5-Sekunden-Schritten. Das Gewichtsfeld bleibt
+  unverändert — dort trägst du dein Körpergewicht ein, bei Zusatzgewicht
+  einfach mehr. Die App merkt sich die Art je Maschine, „Plank" ist beim
+  nächsten Mal automatisch wieder eine Zeitübung.
 - **Limit oder Reserve je Satz** – der ±-Knopf hält fest, ob du am Limit warst
   (**−**) oder noch Luft hattest und nächstes Mal zulegen kannst (**+**). Die
   Markierung wird aus der Textdatei übernommen und auch wieder so exportiert.
@@ -110,6 +116,8 @@ Die Regeln:
 - Eine Zeile wie `45 kg x 15` ist ein **Satz** der zuletzt genannten Übung.
 - Ein **nachgestelltes `-` oder `+`** ist die Beurteilung des Satzes:
   `-` heißt am Limit, `+` heißt noch Reserven.
+- Steht statt der Wiederholungen eine **Zeit** (`85 kg x 01:30`, `01:45` oder
+  `90 s`), wird die Übung als Halteübung geführt. Auch `3 x 01:30 @ 85` geht.
 - Leerzeilen trennen nur optisch und werden übersprungen.
 
 Zusätzlich verstanden, weil verbreitet: `Beinpresse 80x12, 80x12, 90x10` (Name

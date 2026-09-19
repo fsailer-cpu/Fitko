@@ -4,7 +4,7 @@ import { h, toast, confirmAction } from '../dom.js';
 import { getState } from '../store.js';
 import { refresh } from '../router.js';
 import {
-  deleteTemplate, renameTemplate, startWorkout, summarizeSets,
+  deleteTemplate, renameTemplate, startWorkout, summarizeExercise,
   sortedWorkouts, saveAsTemplate, formatDate,
 } from '../model.js';
 
@@ -30,7 +30,7 @@ export function render() {
       h('hr.divider'),
       ...tpl.exercises.slice(0, 6).map((ex) => h('div.row.small',
         h('span.grow.truncate', ex.name || 'Ohne Namen'),
-        h('span.dim', summarizeSets(ex.sets)))),
+        h('span.dim', summarizeExercise(ex)))),
       tpl.exercises.length > 6
         ? h('div.small.dim', { style: { marginTop: '4px' } }, `+ ${tpl.exercises.length - 6} weitere`)
         : null,

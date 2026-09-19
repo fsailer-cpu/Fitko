@@ -374,3 +374,18 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); ou
 }
 .iconbtn:active { background: var(--accent-dim); }
 .iconbtn:disabled { opacity: .3; }
+
+/* Spaltenüberschrift, die zugleich Wdh. <-> Zeit umschaltet. */
+.kindtoggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.kindtoggle:active { opacity: .6; }

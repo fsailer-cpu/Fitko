@@ -11,6 +11,8 @@ import {
   saveAsTemplate, startWorkout, makeSet, makeExercise, rememberExercise, allExerciseNames,
   lastPerformance, summarizeSets, formatDate, formatWeight,
   workoutVolume, workoutSetCount, nextEffort, EFFORT_SIGN, EFFORT_LABEL,
+  isTimed, formatSeconds, parseSeconds, catalogKind, workoutHoldTime,
+  hasTimedExercise, TIME_STEP,
 } from '../model.js';
 
 const DATALIST_ID = 'bekannte-uebungen';
@@ -51,6 +53,34 @@ function numberStepper({ value, stepBy, min = 0, decimals = 2, onchange, label }
     h('button', { type: 'button', 'aria-label': `${label} verringern`, onclick: bump(-stepBy) }, '−'),
     input,
     h('button', { type: 'button', 'aria-label': `${label} erhöhen`, onclick: bump(stepBy) }, '+'),
+  );
+}
+
+/** Wie numberStepper, aber die Anzeige ist mm:ss statt einer nackten Zahl. */
+function timeStepper({ seconds, onchange, label }) {
+  const input = h('input', {
+    type: 'text',
+    inputmode: 'numeric',
+    value: formatSeconds(seconds),
+    'aria-label': label,
+    onchange: () => commit(parseSeconds(input.value)),
+  });
+
+  function commit(next) {
+    const val = Math.max(0, Math.round(next) || 0);
+    input.value = formatSeconds(val);
+    onchange(val);
+  }
+
+  const bump = (delta) => () => {
+    buzz();
+    commit(parseSeconds(input.value) + delta);
+  };
+
+  return h('div.stepper',
+    h('button', { type: 'button', 'aria-label': `${label} verringern`, onclick: bump(-TIME_STEP) }, '−'),
+    input,
+    h('button', { type: 'button', 'aria-label': `${label} erhöhen`, onclick: bump(TIME_STEP) }, '+'),
   );
 }
 
@@ -124,19 +154,31 @@ function setRow(workoutId, ex, set, index, onStructureChange, onTotals) {
         onTotals();
       },
     }),
-    numberStepper({
-      value: set.reps,
-      stepBy: 1,
-      decimals: 0,
-      label: 'Wiederholungen',
-      onchange: (val) => {
-        updateWorkout(workoutId, (w) => {
-          const s = findSet(w, ex.id, set.id);
-          if (s) s.reps = Math.round(val);
-        });
-        onTotals();
-      },
-    }),
+    isTimed(ex)
+      ? timeStepper({
+          seconds: set.seconds,
+          label: 'Zeit',
+          onchange: (val) => {
+            updateWorkout(workoutId, (w) => {
+              const s = findSet(w, ex.id, set.id);
+              if (s) s.seconds = val;
+            });
+            onTotals();
+          },
+        })
+      : numberStepper({
+          value: set.reps,
+          stepBy: 1,
+          decimals: 0,
+          label: 'Wiederholungen',
+          onchange: (val) => {
+            updateWorkout(workoutId, (w) => {
+              const s = findSet(w, ex.id, set.id);
+              if (s) s.reps = Math.round(val);
+            });
+            onTotals();
+          },
+        }),
     doneBtn,
     effortBtn,
   );
@@ -199,14 +241,41 @@ function exerciseCard(workoutId, exId, rerenderExercise, onTotals, moveExercise)
   const previous = lastPerformance(ex.name, workoutId);
   if (previous) {
     card.append(h('p.exercise__hint',
-      `Letztes Mal (${formatDate(previous.workout.date)}): ${summarizeSets(previous.exercise.sets)}`));
+      `Letztes Mal (${formatDate(previous.workout.date)}): `
+      + summarizeSets(previous.exercise.sets, previous.exercise.kind)));
   }
 
   const list = h('div.setlist');
+  // Die Spaltenüberschrift ist zugleich der Umschalter zwischen
+  // Wiederholungen und Haltedauer – so kostet er keine eigene Zeile.
+  const kindToggle = h('button.kindtoggle', {
+    type: 'button',
+    title: isTimed(ex) ? 'Auf Wiederholungen umstellen' : 'Auf Zeit (mm:ss) umstellen',
+    'aria-label': isTimed(ex)
+      ? 'Übung zählt Zeit – auf Wiederholungen umstellen'
+      : 'Übung zählt Wiederholungen – auf Zeit umstellen',
+    onclick: () => {
+      buzz();
+      const next = isTimed(ex) ? 'reps' : 'time';
+      updateWorkout(workoutId, (w) => {
+        const e = w.exercises.find((x) => x.id === exId);
+        if (!e) return;
+        e.kind = next;
+        e.sets.forEach((set) => {
+          // Beim Umschalten einen brauchbaren Startwert setzen, statt 0.
+          if (next === 'time' && !set.seconds) set.seconds = 60;
+          if (next === 'reps' && !set.reps) set.reps = 10;
+        });
+      });
+      if (ex.name) rememberExercise(ex.name, next);
+      rerenderExercise();
+    },
+  }, isTimed(ex) ? 'Zeit' : 'Wdh.');
+
   const header = h('div.sethead',
     h('span', '#'),
     h('span', 'Gewicht'),
-    h('span', 'Wdh.'),
+    kindToggle,
     h('span', { 'aria-label': 'erledigt' }, '✓'),
     h('span', { 'aria-label': 'Gefühl' }, '±'),
   );
@@ -230,7 +299,14 @@ function exerciseCard(workoutId, exId, rerenderExercise, onTotals, moveExercise)
         const lastSet = fresh.sets[fresh.sets.length - 1];
         updateWorkout(workoutId, (w) => {
           const e = w.exercises.find((x) => x.id === exId);
-          if (e) e.sets.push(makeSet(lastSet?.weight ?? 0, lastSet?.reps ?? 10));
+          if (e) {
+            e.sets.push(makeSet(
+              lastSet?.weight ?? 0,
+              lastSet?.reps ?? 10,
+              null,
+              lastSet?.seconds ?? (isTimed(e) ? 60 : 0),
+            ));
+          }
         });
         paint();
       },
@@ -241,9 +317,11 @@ function exerciseCard(workoutId, exId, rerenderExercise, onTotals, moveExercise)
       onclick: () => {
         updateWorkout(workoutId, (w) => {
           const e = w.exercises.find((x) => x.id === exId);
-          if (e) e.sets = previous.exercise.sets.map((s) => makeSet(s.weight, s.reps));
+          if (!e) return;
+          e.kind = previous.exercise.kind === 'time' ? 'time' : 'reps';
+          e.sets = previous.exercise.sets.map((s) => makeSet(s.weight, s.reps, null, s.seconds));
         });
-        paint();
+        rerenderExercise();
         toast('Sätze vom letzten Mal übernommen');
       },
     }, '↻ wie zuletzt') : null,
@@ -315,13 +393,20 @@ export function render({ id }) {
     const w = getWorkout(id);
     if (!w) return;
     const { total, done } = workoutSetCount(w);
+    const value = (text) => h('span.strong', { style: { color: 'var(--text)' } }, text);
     totals.replaceChildren(
       h('div.row.row--between',
         h('span', 'Sätze erledigt'),
-        h('span.strong', { style: { color: 'var(--text)' } }, `${done} / ${total}`)),
+        value(`${done} / ${total}`)),
       h('div.row.row--between', { style: { marginTop: '4px' } },
         h('span', 'Volumen (erledigt)'),
-        h('span.strong', { style: { color: 'var(--text)' } }, formatWeight(workoutVolume(w, true)))),
+        value(formatWeight(workoutVolume(w, true)))),
+      // Halteübungen haben kein kg-Volumen, sie stehen hier mit ihrer Zeit.
+      hasTimedExercise(w)
+        ? h('div.row.row--between', { style: { marginTop: '4px' } },
+            h('span', 'Haltezeit (erledigt)'),
+            value(formatSeconds(workoutHoldTime(w, true))))
+        : null,
     );
   };
 
@@ -354,8 +439,8 @@ export function render({ id }) {
   body.append(
     h('div.section-title', 'Übungen'),
     h('p.small.dim', { style: { margin: '-4px 4px 8px' } },
-      '✓ = erledigt. ± = wie war der Satz: − am Limit, + noch Reserven. ' +
-      'Satznummer antippen löscht den Satz.'),
+      '± = Gefühl (− am Limit, + Reserven). Satznummer antippen löscht den ' +
+      'Satz. „Wdh.“ antippen schaltet auf Zeit um.'),
     exercisesBox,
   );
   paintExercises();
@@ -373,13 +458,15 @@ export function render({ id }) {
   function addExercise() {
     const name = addInput.value.trim();
     const prev = name ? lastPerformance(name, id) : null;
+    const kind = prev ? (prev.exercise.kind || 'reps') : (name ? catalogKind(name) : 'reps');
     updateWorkout(id, (w) => {
       w.exercises.push(makeExercise(
         name,
-        prev ? prev.exercise.sets.map((s) => makeSet(s.weight, s.reps)) : null,
+        prev ? prev.exercise.sets.map((s) => makeSet(s.weight, s.reps, null, s.seconds)) : null,
+        kind,
       ));
     });
-    if (name) rememberExercise(name);
+    if (name) rememberExercise(name, kind);
     addInput.value = '';
     paintExercises();
     if (prev) toast('Werte vom letzten Mal übernommen');

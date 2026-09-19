@@ -58,6 +58,18 @@ Training (Datum, Name, Notiz, Status)
         └── Satz (Gewicht, Wiederholungen, erledigt, Beurteilung)
 ```
 
+Eine Übung hat eine **Art**: `reps` zählt Wiederholungen, `time` zählt die
+Haltedauer in Sekunden (Plank & Co.). Das Gewichtsfeld gilt in beiden Fällen
+gleich — bei Halteübungen steht dort das Körpergewicht bzw. das Zusatzgewicht.
+Die Art wird im Übungskatalog mitgeführt, damit dieselbe Maschine beim nächsten
+Mal nicht neu umgestellt werden muss.
+
+Wichtig dabei: ein Zeit-Satz fließt **nicht** ins kg-Volumen. 85 kg × 90 s wäre
+keine mit Wiederholungen vergleichbare Zahl und würde jede Summe im Verlauf
+unbrauchbar machen. Halteübungen werden stattdessen über die **Haltezeit**
+ausgewiesen — im Training als eigene Zeile, in der Übungsübersicht als
+„Längste Zeit" und „Haltezeit je Einheit".
+
 Die **Beurteilung** je Satz ist dreiwertig: *am Limit* (in der Textdatei `-`),
 *noch Reserven* (`+`) oder offen. Sie ist bewusst ein eigenes Feld und nicht
 Teil der Notiz, weil sie die Grundlage für die Entscheidung „nächstes Mal mehr
@@ -150,14 +162,17 @@ beim Export wieder genauso geschrieben.
 
 Nach Nutzen sortiert, keiner davon ist Voraussetzung für den Alltagsbetrieb:
 
-1. **Pausentimer** zwischen den Sätzen, mit Ton und Vibration.
-2. **Automatische Sicherung**: Erinnerung, wenn die letzte Sicherung älter als
+1. **QR-Codes an Maschinen** – ein optionales Code-Feld je Maschine, einmal
+   zugeordnet, danach scannen statt suchen. Braucht vorher die Information,
+   was in den Codes des Studios tatsächlich steht.
+2. **Pausentimer** zwischen den Sätzen, mit Ton und Vibration.
+3. **Automatische Sicherung**: Erinnerung, wenn die letzte Sicherung älter als
    zwei Wochen ist.
-3. **Persönliche Bestleistungen** hervorheben, wenn ein Satz den bisherigen
+4. **Persönliche Bestleistungen** hervorheben, wenn ein Satz den bisherigen
    Bestwert einer Maschine übertrifft.
-4. **Übungsgruppen** (Brust, Rücken, Beine) für Auswertungen nach Muskelgruppe.
-5. **Geschätztes 1RM** je Übung (Epley-Formel) als zusätzliche Fortschrittskurve.
-6. **Sync**, falls ein zweites Gerät dazukommt — dann wird ein Server nötig.
+5. **Übungsgruppen** (Brust, Rücken, Beine) für Auswertungen nach Muskelgruppe.
+6. **Geschätztes 1RM** je Übung (Epley-Formel) als zusätzliche Fortschrittskurve.
+7. **Sync**, falls ein zweites Gerät dazukommt — dann wird ein Server nötig.
 
 ## 7. Prüfung
 
@@ -167,12 +182,16 @@ Zwei Ebenen, beide über `npm test`:
   Titelzeile, Datum, sechs Übungen mit ihren Sätzen, nachgestellte Striche,
   mehrere Trainings in einer Datei, Übungsnamen die mit einer Zahl beginnen,
   die Beurteilungen `-` und `+`, und den Rundlauf Export → Import. 15 Tests.
+- `tests/time.test.mjs` prüft die Halteübungen: mm:ss lesen und schreiben,
+  dass Zeit nicht ins kg-Volumen fließt, die Haltezeit-Summen, und dass ein
+  Datum nicht als Zeitangabe missverstanden wird. 9 Tests.
 - `tests/e2e.mjs` spielt den gesamten Ablauf in einem echten Browser mit
   iPhone-Abmessungen durch: Training anlegen, Maschinen hinzufügen, Gewicht per
   Taste und per Eingabe ändern, Sätze ergänzen, abhaken und beurteilen,
   Training abschließen,
   daraus ein neues Training erzeugen und prüfen, dass die Werte übernommen und
   die Haken zurückgesetzt sind; dazu Reihenfolge ändern, löschen, Textimport der
-  echten Notiz und Datenerhalt nach Neustart. 21 Schritte.
+  echten Notiz, Umschalten auf Zeit samt Übernahme in ein Folgetraining, und
+  Datenerhalt nach Neustart. 28 Schritte.
 
 Alles grün.
