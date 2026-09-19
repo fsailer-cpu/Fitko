@@ -55,8 +55,15 @@ Drei Ebenen, die genau der Realität im Studio entsprechen:
 ```
 Training (Datum, Name, Notiz, Status)
   └── Übung (Name der Maschine, Notiz)
-        └── Satz (Gewicht, Wiederholungen, erledigt)
+        └── Satz (Gewicht, Wiederholungen, erledigt, Beurteilung)
 ```
+
+Die **Beurteilung** je Satz ist dreiwertig: *am Limit* (in der Textdatei `-`),
+*noch Reserven* (`+`) oder offen. Sie ist bewusst ein eigenes Feld und nicht
+Teil der Notiz, weil sie die Grundlage für die Entscheidung „nächstes Mal mehr
+Gewicht" ist und damit später auswertbar bleiben soll. Beim Übernehmen eines
+Trainings als Vorlage wird sie zurückgesetzt — sie beschreibt eine konkrete
+vergangene Leistung, keine Planung.
 
 Dazu zwei Nebenlisten:
 
@@ -136,8 +143,8 @@ das bisher benutzte Layout (Datumszeile, Übungsname auf eigener Zeile, darunter
 je Zeile ein Satz `45 kg x 15`, nachgestellte Striche werden ignoriert) und
 zusätzlich die verbreiteten Einzeiler `80x12` und `3x10 @ 55`. Zeilen, die zu
 nichts passen, werden nicht verschluckt, sondern nach dem Import aufgelistet.
-Offen ist, was der nachgestellte Strich in der bisherigen Datei bedeutet — er
-wird derzeit verworfen.
+Das nachgestellte `-` bzw. `+` wird als Beurteilung des Satzes übernommen und
+beim Export wieder genauso geschrieben.
 
 ## 6. Mögliche nächste Schritte
 
@@ -159,12 +166,13 @@ Zwei Ebenen, beide über `npm test`:
 - `tests/textio.test.mjs` prüft den Parser gegen die reale Trainingsnotiz:
   Titelzeile, Datum, sechs Übungen mit ihren Sätzen, nachgestellte Striche,
   mehrere Trainings in einer Datei, Übungsnamen die mit einer Zahl beginnen,
-  und den Rundlauf Export → Import. 10 Tests.
+  die Beurteilungen `-` und `+`, und den Rundlauf Export → Import. 15 Tests.
 - `tests/e2e.mjs` spielt den gesamten Ablauf in einem echten Browser mit
   iPhone-Abmessungen durch: Training anlegen, Maschinen hinzufügen, Gewicht per
-  Taste und per Eingabe ändern, Sätze ergänzen und abhaken, Training abschließen,
+  Taste und per Eingabe ändern, Sätze ergänzen, abhaken und beurteilen,
+  Training abschließen,
   daraus ein neues Training erzeugen und prüfen, dass die Werte übernommen und
   die Haken zurückgesetzt sind; dazu Reihenfolge ändern, löschen, Textimport der
-  echten Notiz und Datenerhalt nach Neustart. 19 Schritte.
+  echten Notiz und Datenerhalt nach Neustart. 21 Schritte.
 
 Alles grün.

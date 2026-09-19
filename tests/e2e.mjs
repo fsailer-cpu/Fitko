@@ -102,6 +102,21 @@ await step('Sätze abhaken', async () => {
   if (pressed !== 3) throw new Error('abgehakt: ' + pressed);
 });
 
+await step('Gefühl je Satz durchschalten', async () => {
+  const first = page.locator('.exercise').first();
+  const btn = first.locator('.setrow').first().locator('.seteffort');
+  if (await btn.textContent() !== '·') throw new Error('Startzustand nicht leer');
+  await btn.click();
+  if (await btn.getAttribute('data-effort') !== 'limit') throw new Error('erster Klick nicht "am Limit"');
+  if (await btn.textContent() !== '−') throw new Error('Zeichen für Limit falsch');
+  await btn.click();
+  if (await btn.getAttribute('data-effort') !== 'reserve') throw new Error('zweiter Klick nicht "Reserven"');
+  if (await btn.textContent() !== '+') throw new Error('Zeichen für Reserven falsch');
+  await btn.click();
+  if (await btn.getAttribute('data-effort')) throw new Error('dritter Klick setzt nicht zurück');
+  await btn.click(); // auf "am Limit" stehen lassen
+});
+
 await step('Volumen in der Zusammenfassung stimmt', async () => {
   const text = await page.locator('#view .card').last().textContent().catch(() => '');
   const summary = await page.locator('#view').textContent();
@@ -125,6 +140,13 @@ await step('Neues Training aus altem als Vorlage', async () => {
   if (Number(w) !== 80) throw new Error('Gewicht nicht übernommen: ' + w);
   const done = await page.locator('.setdone[aria-pressed="true"]').count();
   if (done !== 0) throw new Error('Haken hätten zurückgesetzt sein müssen');
+  const marked = await page.locator('.seteffort[data-effort="limit"], .seteffort[data-effort="reserve"]').count();
+  if (marked !== 0) throw new Error('Beurteilung gehört zur alten Leistung, darf nicht mitkopiert werden');
+});
+
+await step('Gefühl bleibt nach Neuladen erhalten', async () => {
+  const hint = await page.locator('.exercise__hint').first().textContent();
+  if (!hint.includes('−')) throw new Error('"letztes Mal" zeigt die Markierung nicht: ' + hint);
 });
 
 await step('"Letztes Mal"-Hinweis erscheint', async () => {
@@ -171,6 +193,15 @@ await step('Textimport', async () => {
   const txt = await page.locator('#view').textContent();
   if (!txt.includes('1 Trainings importiert')) throw new Error('Import-Report fehlt: ' + txt.slice(0, 200));
   if (txt.includes('⚠︎')) throw new Error('unerwartete Hinweise: ' + txt.slice(0, 300));
+  const efforts = await page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem('fitko.state.v1'));
+    const w = state.workouts.find((x) => x.name === 'Training Fitko');
+    return w.exercises.map((e) => e.sets.map((s) => s.effort));
+  });
+  const expected = JSON.stringify([[null, null, 'limit'], [null, null]]);
+  if (JSON.stringify(efforts) !== expected) {
+    throw new Error('Markierungen falsch importiert: ' + JSON.stringify(efforts));
+  }
 });
 
 await step('Import landet im Verlauf', async () => {

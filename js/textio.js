@@ -9,7 +9,7 @@
 //   Abductor Leg Extension    <- Zeile ohne Zahlen: Name der Übung
 //   45 kg x 15                <- Zeile mit Zahl am Anfang: ein Satz
 //   55 kg x 15
-//   65 kg x 15 -              <- nachgestellte Striche werden ignoriert
+//   65 kg x 15 -              <- - am Limit, + noch Reserven
 //
 //   Oberarme zu sich ziehen   <- Leerzeilen trennen nur optisch
 //   35 kg x 12
@@ -19,7 +19,7 @@
 //   Latzug 3x10 @ 55                   (drei Sätze à 10 Wdh mit 55 kg)
 //   # Notiz: Schulter zwickt
 
-import { uid, todayISO } from './model.js';
+import { uid, todayISO, EFFORT_TEXT } from './model.js';
 
 const DATE_DE = /^(\d{1,2})\.(\d{1,2})\.(\d{2,4})\s*$|^(\d{1,2})\.(\d{1,2})\.(\d{2,4})\s+(.*)$/;
 const DATE_ISO = /^(\d{4})-(\d{1,2})-(\d{1,2})\s*$|^(\d{4})-(\d{1,2})-(\d{1,2})\s+(.*)$/;
@@ -43,27 +43,44 @@ function parseDate(line) {
   return null;
 }
 
+/**
+ * Trennt die Beurteilung am Zeilenende ab: "-" heißt am Limit, "+" heißt
+ * noch Reserven. Ein einzelner Gedankenstrich ohne Bedeutung sieht genauso
+ * aus – er wird gleich behandelt, weil das die Schreibweise der Notiz ist.
+ */
+function splitEffort(text) {
+  const m = /^(.*?)\s*([-–—+])\s*$/.exec(text);
+  if (!m || !m[1].trim()) return { body: text.trim(), effort: null };
+  return { body: m[1].trim(), effort: m[2] === '+' ? 'reserve' : 'limit' };
+}
+
 /** Ein einzelner Satz-Ausdruck. Liefert null, wenn nichts passt. */
-function parseSetChunk(chunk) {
+function parseSetChunk(chunk, effort = null) {
   // "3x10 @ 55" -> drei Sätze à 10 Wdh mit 55 kg
   let m = /^(\d+)\s*[x×*]\s*(\d+)\s*@\s*(\d+(?:[.,]\d+)?)\s*(?:kg)?$/i.exec(chunk);
   if (m) {
     const count = Math.min(20, Number(m[1]));
-    return Array.from({ length: count }, () =>
-      ({ id: uid(), weight: num(m[3]), reps: Number(m[2]), done: true }));
+    return Array.from({ length: count }, (_, i) => ({
+      id: uid(),
+      weight: num(m[3]),
+      reps: Number(m[2]),
+      done: true,
+      // Die Beurteilung gilt dem zuletzt genannten Satz.
+      effort: i === count - 1 ? effort : null,
+    }));
   }
 
   // "45 kg x 15", "80x12", "80 × 12 Wdh"
   m = /^(\d+(?:[.,]\d+)?)\s*(?:kg)?\s*[x×*]\s*(\d+)\s*(?:wdh\.?|wiederholungen)?$/i.exec(chunk);
-  if (m) return [{ id: uid(), weight: num(m[1]), reps: Number(m[2]), done: true }];
+  if (m) return [{ id: uid(), weight: num(m[1]), reps: Number(m[2]), done: true, effort }];
 
   // nur ein Gewicht
   m = /^(\d+(?:[.,]\d+)?)\s*kg$/i.exec(chunk);
-  if (m) return [{ id: uid(), weight: num(m[1]), reps: 0, done: true }];
+  if (m) return [{ id: uid(), weight: num(m[1]), reps: 0, done: true, effort }];
 
   // nur Wiederholungen
   m = /^(\d+)\s*(?:wdh\.?|wiederholungen)$/i.exec(chunk);
-  if (m) return [{ id: uid(), weight: 0, reps: Number(m[1]), done: true }];
+  if (m) return [{ id: uid(), weight: 0, reps: Number(m[1]), done: true, effort }];
 
   return null;
 }
@@ -79,10 +96,10 @@ function parseSets(text) {
   for (const part of text.split(/[,;]+/)) {
     const raw = part.trim();
     if (!raw) continue;
-    // Nachgestellte Striche sind in der bisherigen Datei bloße Markierungen.
-    const chunk = raw.replace(/[\s\-–—]+$/, '').replace(/\s+/g, ' ').trim();
+    const { body, effort } = splitEffort(raw.replace(/\s+/g, ' '));
+    const chunk = body.trim();
     if (!chunk) continue;
-    const parsed = parseSetChunk(chunk);
+    const parsed = parseSetChunk(chunk, effort);
     if (parsed) sets.push(...parsed);
     else leftovers.push(raw);
   }
@@ -218,7 +235,7 @@ export function parseWorkoutText(text) {
     w.exercises.forEach((ex) => {
       if (!ex.sets.length) {
         warnings.push(`„${ex.name}“ hat keine Sätze`);
-        ex.sets.push({ id: uid(), weight: 0, reps: 0, done: false });
+        ex.sets.push({ id: uid(), weight: 0, reps: 0, done: false, effort: null });
       }
     });
   });
@@ -244,7 +261,10 @@ export function workoutsToText(workouts) {
   return workouts.map((w) => {
     const blocks = w.exercises.map((ex) => [
       ex.name || 'Übung',
-      ...ex.sets.map((s) => `${weightText(s.weight)} kg x ${s.reps}`),
+      ...ex.sets.map((s) => {
+        const mark = EFFORT_TEXT[s.effort] ? ` ${EFFORT_TEXT[s.effort]}` : '';
+        return `${weightText(s.weight)} kg x ${s.reps}${mark}`;
+      }),
     ].join('\n'));
     const head = w.name && w.name !== 'Training'
       ? `${dateText(w.date)} ${w.name}`

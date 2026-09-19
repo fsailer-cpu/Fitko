@@ -43,8 +43,40 @@ export function formatDuration(ms) {
 /* Sätze und Übungen                                                   */
 /* ------------------------------------------------------------------ */
 
-export function makeSet(weight = 0, reps = 10) {
-  return { id: uid(), weight: Number(weight) || 0, reps: Number(reps) || 0, done: false };
+/**
+ * Ein Satz. `effort` hält fest, wie er sich angefühlt hat:
+ * 'limit'   – am Limit, mehr ging nicht        (in der Textdatei: -)
+ * 'reserve' – noch Luft, nächstes Mal zulegen  (in der Textdatei: +)
+ * null      – nicht beurteilt
+ */
+export function makeSet(weight = 0, reps = 10, effort = null) {
+  return {
+    id: uid(),
+    weight: Number(weight) || 0,
+    reps: Number(reps) || 0,
+    done: false,
+    effort: EFFORTS.includes(effort) ? effort : null,
+  };
+}
+
+export const EFFORTS = ['limit', 'reserve'];
+
+/** Reihenfolge beim Durchtippen des Knopfes. */
+export const EFFORT_CYCLE = [null, 'limit', 'reserve'];
+
+export const EFFORT_SIGN = { limit: '−', reserve: '+' };
+
+export const EFFORT_LABEL = {
+  limit: 'am Limit',
+  reserve: 'noch Reserven',
+};
+
+/** Das Zeichen, wie es in der Textdatei steht. */
+export const EFFORT_TEXT = { limit: '-', reserve: '+' };
+
+export function nextEffort(effort) {
+  const i = EFFORT_CYCLE.indexOf(effort ?? null);
+  return EFFORT_CYCLE[(i + 1) % EFFORT_CYCLE.length];
 }
 
 export function makeExercise(name = '', sets = null) {
@@ -77,12 +109,16 @@ export function workoutSetCount(workout) {
 /** Kurzfassung à la "3 × 80 kg" bzw. "80/80/90 kg" für Listen. */
 export function summarizeSets(sets) {
   if (!sets.length) return '–';
+  const mark = (s) => (s.effort ? ` ${EFFORT_SIGN[s.effort]}` : '');
   const weights = sets.map((s) => Number(s.weight) || 0);
   const reps = sets.map((s) => Number(s.reps) || 0);
   const sameWeight = weights.every((w) => w === weights[0]);
   const sameReps = reps.every((r) => r === reps[0]);
-  if (sameWeight && sameReps) return `${sets.length} × ${reps[0]} @ ${formatWeight(weights[0])}`;
-  return sets.map((s) => `${s.reps}×${formatWeight(s.weight)}`).join(' · ');
+  const marks = sets.map(mark).filter(Boolean).join('');
+  if (sameWeight && sameReps) {
+    return `${sets.length} × ${reps[0]} @ ${formatWeight(weights[0])}${marks}`;
+  }
+  return sets.map((s) => `${s.reps}×${formatWeight(s.weight)}${mark(s)}`).join(' · ');
 }
 
 /* ------------------------------------------------------------------ */
@@ -212,7 +248,11 @@ export function saveAsTemplate(workout, name) {
       id: uid(),
       name: ex.name,
       note: ex.note || '',
-      sets: ex.sets.map((s) => ({ id: uid(), weight: s.weight, reps: s.reps, done: false })),
+      // Die Beurteilung (Limit/Reserve) gilt für die damalige Leistung und
+      // wird bewusst nicht mitkopiert.
+      sets: ex.sets.map((s) => ({
+        id: uid(), weight: s.weight, reps: s.reps, done: false, effort: null,
+      })),
     })),
   };
   mutate((s) => s.templates.push(tpl));

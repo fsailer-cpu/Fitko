@@ -65,6 +65,50 @@ test('übernimmt Gewicht und Wiederholungen je Satz', () => {
   assert.deepEqual(plain('Waden'), [[160, 15]]);
 });
 
+test('liest die Beurteilung am Zeilenende', () => {
+  const [w] = parseWorkoutText(NOTIZ).workouts;
+  const effort = (name) => w.exercises.find((e) => e.name === name)
+    .sets.map((s) => s.effort);
+
+  assert.deepEqual(effort('Abductor Leg Extension Oberschenkel'),
+    [null, null, 'limit'], '- heißt am Limit');
+  assert.deepEqual(effort('Oberarme zu sich ziehen'), [null, null, 'limit']);
+  assert.deepEqual(effort('Arme hoch auf Bank'), [null, null, null],
+    'ohne Zeichen bleibt die Beurteilung offen');
+});
+
+test('+ heißt noch Reserven', () => {
+  const { workouts } = parseWorkoutText(`21.05.2026
+Latzug
+50 kg x 12 +
+55 kg x 10 -
+60 kg x 8`);
+
+  assert.deepEqual(workouts[0].exercises[0].sets.map((s) => s.effort),
+    ['reserve', 'limit', null]);
+});
+
+test('Beurteilung auch bei Sätzen in einer Zeile', () => {
+  const { workouts } = parseWorkoutText(`21.05.2026
+Beinpresse 80x12, 90x10 +, 100x8 -
+Latzug 3x10 @ 55 +`);
+
+  const [beinpresse, latzug] = workouts[0].exercises;
+  assert.deepEqual(beinpresse.sets.map((s) => s.effort), [null, 'reserve', 'limit']);
+  assert.deepEqual(latzug.sets.map((s) => s.effort), [null, null, 'reserve'],
+    'die Beurteilung gilt dem letzten der drei Sätze');
+});
+
+test('ein Gedankenstrich allein ist keine Übung', () => {
+  const { workouts, warnings } = parseWorkoutText(`21.05.2026
+Latzug
+50 kg x 12 –`);
+
+  assert.equal(workouts[0].exercises.length, 1);
+  assert.equal(workouts[0].exercises[0].sets[0].effort, 'limit');
+  assert.deepEqual(warnings, []);
+});
+
 test('importierte Sätze gelten als absolviert', () => {
   const [w] = parseWorkoutText(NOTIZ).workouts;
   assert.ok(w.exercises.every((e) => e.sets.every((s) => s.done)));
@@ -127,16 +171,29 @@ Latzug
   assert.equal(workouts[0].note, 'Schulter zwickt');
 });
 
-test('Export lässt sich wieder einlesen', () => {
+test('Export lässt sich wieder einlesen, samt Beurteilung', () => {
   const original = parseWorkoutText(NOTIZ).workouts;
   const roundTrip = parseWorkoutText(workoutsToText(original)).workouts;
 
+  const shape = (ws) => ws[0].exercises.map((e) =>
+    [e.name, e.sets.map((s) => [s.weight, s.reps, s.effort])]);
+
   assert.equal(roundTrip.length, original.length);
-  assert.deepEqual(
-    roundTrip[0].exercises.map((e) => [e.name, e.sets.map((s) => [s.weight, s.reps])]),
-    original[0].exercises.map((e) => [e.name, e.sets.map((s) => [s.weight, s.reps])]),
-  );
+  assert.deepEqual(shape(roundTrip), shape(original));
   assert.equal(roundTrip[0].date, original[0].date);
+});
+
+test('Export schreibt - und + wie in der Notiz', () => {
+  const { workouts } = parseWorkoutText(`21.05.2026
+Latzug
+50 kg x 12 +
+55 kg x 10 -
+60 kg x 8`);
+
+  const text = workoutsToText(workouts);
+  assert.ok(text.includes('50 kg x 12 +'), text);
+  assert.ok(text.includes('55 kg x 10 -'), text);
+  assert.ok(text.includes('60 kg x 8\n') || text.endsWith('60 kg x 8'), text);
 });
 
 test('Export nutzt das gewohnte Layout', () => {

@@ -10,7 +10,7 @@ import {
   getWorkout, updateWorkout, finishWorkout, reopenWorkout, deleteWorkout,
   saveAsTemplate, startWorkout, makeSet, makeExercise, rememberExercise, allExerciseNames,
   lastPerformance, summarizeSets, formatDate, formatWeight,
-  workoutVolume, workoutSetCount,
+  workoutVolume, workoutSetCount, nextEffort, EFFORT_SIGN, EFFORT_LABEL,
 } from '../model.js';
 
 const DATALIST_ID = 'bekannte-uebungen';
@@ -74,6 +74,29 @@ function setRow(workoutId, ex, set, index, onStructureChange, onTotals) {
     },
   }, '✓');
 
+  const effortBtn = h('button.seteffort', {
+    type: 'button',
+    onclick: () => {
+      buzz();
+      updateWorkout(workoutId, (w) => {
+        const s = findSet(w, ex.id, set.id);
+        if (s) s.effort = nextEffort(s.effort);
+      });
+      paintEffort();
+    },
+  });
+
+  function paintEffort() {
+    const now = findSet(getWorkout(workoutId), ex.id, set.id);
+    const effort = now?.effort ?? null;
+    effortBtn.textContent = effort ? EFFORT_SIGN[effort] : '·';
+    effortBtn.dataset.effort = effort || '';
+    effortBtn.setAttribute('aria-label',
+      `Satz ${index + 1}: ${effort ? EFFORT_LABEL[effort] : 'nicht beurteilt'}`);
+    effortBtn.title = effort ? EFFORT_LABEL[effort] : 'Wie war der Satz?';
+  }
+  paintEffort();
+
   row.append(
     h('button.setrow__no', {
       type: 'button',
@@ -115,6 +138,7 @@ function setRow(workoutId, ex, set, index, onStructureChange, onTotals) {
       },
     }),
     doneBtn,
+    effortBtn,
   );
   return row;
 }
@@ -183,7 +207,8 @@ function exerciseCard(workoutId, exId, rerenderExercise, onTotals, moveExercise)
     h('span', '#'),
     h('span', 'Gewicht'),
     h('span', 'Wdh.'),
-    h('span', ''),
+    h('span', { 'aria-label': 'erledigt' }, '✓'),
+    h('span', { 'aria-label': 'Gefühl' }, '±'),
   );
 
   const paint = () => {
@@ -329,6 +354,7 @@ export function render({ id }) {
   body.append(
     h('div.section-title', 'Übungen'),
     h('p.small.dim', { style: { margin: '-4px 4px 8px' } },
+      '✓ = erledigt. ± = wie war der Satz: − am Limit, + noch Reserven. ' +
       'Satznummer antippen löscht den Satz.'),
     exercisesBox,
   );

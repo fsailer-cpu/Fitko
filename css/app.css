@@ -212,8 +212,9 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); ou
 
 .sethead, .setrow {
   display: grid;
-  grid-template-columns: 26px 1fr 1fr 44px;
-  gap: 6px;
+  /* Nr · Gewicht · Wdh. · erledigt · Gefühl */
+  grid-template-columns: 20px minmax(0, 1fr) minmax(0, 1fr) 36px 36px;
+  gap: 5px;
   align-items: center;
 }
 
@@ -224,7 +225,7 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); ou
   letter-spacing: .04em;
   text-transform: uppercase;
 }
-.sethead span:nth-child(2), .sethead span:nth-child(3) { text-align: center; }
+.sethead span:nth-child(n+2) { text-align: center; }
 
 /* Die Satznummer ist gleichzeitig der Löschen-Knopf für die Zeile. */
 .setrow__no {
@@ -242,7 +243,7 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); ou
 
 .stepper {
   display: grid;
-  grid-template-columns: 34px 1fr 34px;
+  grid-template-columns: 30px minmax(0, 1fr) 30px;
   align-items: center;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -272,7 +273,7 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); ou
 .stepper input::-webkit-outer-spin-button,
 .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
-.setdone {
+.setdone, .seteffort {
   height: 40px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -284,6 +285,22 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); ou
   background: rgba(53, 196, 139, .18);
   border-color: var(--good);
   color: var(--good);
+}
+
+/* − am Limit, + noch Reserven; leer heißt nicht beurteilt. */
+.seteffort {
+  font-size: 19px;
+  font-weight: 700;
+}
+.seteffort[data-effort="limit"] {
+  background: rgba(255, 176, 32, .16);
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.seteffort[data-effort="reserve"] {
+  background: rgba(79, 140, 255, .16);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .setrow--done .setrow__no { color: var(--good); }

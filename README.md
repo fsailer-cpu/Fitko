@@ -19,6 +19,11 @@ Die Analyse der Umsetzungsvarianten und die Begründung der Architektur stehen i
   Standard 2,5 kg) und Wiederholungen; die Zahl lässt sich auch direkt eingeben.
 - **„Letztes Mal"-Hinweis** – bei jeder Maschine steht, was du dort zuletzt
   geschafft hast, plus ein Knopf, der genau diese Sätze übernimmt.
+- **Limit oder Reserve je Satz** – der ±-Knopf hält fest, ob du am Limit warst
+  (**−**) oder noch Luft hattest und nächstes Mal zulegen kannst (**+**). Die
+  Markierung wird aus der Textdatei übernommen und auch wieder so exportiert.
+  Sie gilt der damaligen Leistung und wird deshalb beim Übernehmen als Vorlage
+  bewusst nicht mitkopiert.
 - **Fortschritt je Maschine** – Bestwert, Anzahl Einheiten und Volumen-Verlauf.
 - **Offline** – funktioniert ohne Netz, auch im Keller-Fitnessstudio.
 - **Sicherung** – Export als JSON (vollständig) und als Textdatei (lesbar);
@@ -103,7 +108,8 @@ Die Regeln:
   Training; steht dahinter noch Text, wird das der Name.
 - Eine Zeile, die **nicht mit einer Zahl beginnt**, ist der Name einer Übung.
 - Eine Zeile wie `45 kg x 15` ist ein **Satz** der zuletzt genannten Übung.
-- **Nachgestellte Striche** (`65 kg x 15 -`) werden ignoriert.
+- Ein **nachgestelltes `-` oder `+`** ist die Beurteilung des Satzes:
+  `-` heißt am Limit, `+` heißt noch Reserven.
 - Leerzeilen trennen nur optisch und werden übersprungen.
 
 Zusätzlich verstanden, weil verbreitet: `Beinpresse 80x12, 80x12, 90x10` (Name
