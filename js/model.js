@@ -399,12 +399,17 @@ export function allExerciseNames() {
 export function lastPerformance(name, excludeWorkoutId = null) {
   const key = (name || '').trim().toLowerCase();
   if (!key) return null;
+  let fallback = null;
   for (const w of sortedWorkouts()) {
     if (w.id === excludeWorkoutId) continue;
     const ex = w.exercises.find((e) => (e.name || '').trim().toLowerCase() === key);
-    if (ex && ex.sets.length) return { workout: w, exercise: ex };
+    if (!ex || !ex.sets.length) continue;
+    // Eine geplante, aber ausgelassene Übung ist keine Leistung. Sie dient
+    // nur als Rückfall, falls es gar keinen absolvierten Eintrag gibt.
+    if (ex.sets.some((s) => s.done)) return { workout: w, exercise: ex };
+    fallback = fallback || { workout: w, exercise: ex };
   }
-  return null;
+  return fallback;
 }
 
 /** Verlauf einer Übung über alle Trainings – für die Fortschrittsansicht. */

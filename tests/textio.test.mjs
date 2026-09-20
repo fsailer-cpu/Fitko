@@ -203,3 +203,118 @@ test('Export nutzt das gewohnte Layout', () => {
   assert.ok(text.startsWith('21.05.2026 Training Fitko'), text.slice(0, 60));
   assert.ok(text.includes('Abductor Leg Extension Oberschenkel\n45 kg x 15\n55 kg x 15\n65 kg x 15'));
 });
+
+/* --- Muster aus der echten, gewachsenen Notiz --- */
+
+test('Dezimalkomma wird nicht als Satztrenner gelesen', () => {
+  const { workouts } = parseWorkoutText(`21.05.2026
+Prone leg curl, 1/4 hinten
+17,5 kg x 15
+22,5 kg x15`);
+
+  const ex = workouts[0].exercises[0];
+  assert.equal(ex.name, 'Prone leg curl, 1/4 hinten', 'Komma im Namen bleibt');
+  assert.deepEqual(ex.sets.map((s) => [s.weight, s.reps]), [[17.5, 15], [22.5, 15]]);
+});
+
+test('Datum ohne Jahr erbt das Jahr der letzten vollen Angabe', () => {
+  const { workouts } = parseWorkoutText(`21.05.2026
+Latzug
+50 kg x 12
+
+28.05.
+Latzug
+55 kg x 12
+
+05.06.
+Latzug
+60 kg x 12`);
+
+  assert.deepEqual(workouts.map((w) => w.date),
+    ['2026-05-21', '2026-05-28', '2026-06-05']);
+});
+
+test('Jahreswechsel bei rückläufigem Monat', () => {
+  const { workouts } = parseWorkoutText(`20.12.2026
+Latzug
+50 kg x 12
+
+08.01.
+Latzug
+55 kg x 12`);
+
+  assert.deepEqual(workouts.map((w) => w.date), ['2026-12-20', '2027-01-08']);
+});
+
+test('"1:20 x 3" ist Haltedauer mal Anzahl', () => {
+  const { workouts } = parseWorkoutText(`21.05.2026
+Plank
+1:20 x 3`);
+
+  const ex = workouts[0].exercises[0];
+  assert.equal(ex.kind, 'time');
+  assert.equal(ex.sets.length, 3);
+  assert.ok(ex.sets.every((s) => s.seconds === 80));
+});
+
+test('Bemerkung hinter dem Satz landet in der Notiz, der Satz bleibt', () => {
+  const { workouts, warnings } = parseWorkoutText(`21.05.2026
+Arme nach oben auf Bank 30 Grad
+20 kg x 12
+40 kg x 8 - 45 kg zuvor
+
+Wadeln
+180 kg x 15 190 kg zuvor`);
+
+  const [arme, wadeln] = workouts[0].exercises;
+  assert.deepEqual(arme.sets.map((s) => [s.weight, s.reps]), [[20, 12], [40, 8]]);
+  assert.deepEqual(wadeln.sets.map((s) => [s.weight, s.reps]), [[180, 15]]);
+  assert.match(workouts[0].note, /45 kg zuvor/);
+  assert.match(workouts[0].note, /190 kg zuvor/);
+  assert.deepEqual(warnings, [], 'nichts geht verloren');
+});
+
+test('"o" hält den Satz fest, ohne ihn zu bewerten', () => {
+  const { workouts, warnings } = parseWorkoutText(`21.05.2026
+Abductor
+65 kg x 15 o`);
+
+  const [set] = workouts[0].exercises[0].sets;
+  assert.deepEqual([set.weight, set.reps, set.effort, set.done], [65, 15, null, true]);
+  assert.deepEqual(warnings, []);
+});
+
+test('"nein" heißt ausgelassen: gleicher Name, Sätze unabgehakt', () => {
+  const { workouts } = parseWorkoutText(`21.05.2026
+Wadeln
+160 kg x 15
+
+28.05.
+Wadeln nein
+170 kg x 15
+190 kg x 15`);
+
+  assert.equal(workouts[1].exercises[0].name, 'Wadeln', 'kein zweiter Maschinenname');
+  assert.ok(workouts[1].exercises[0].sets.every((s) => !s.done));
+  assert.ok(workouts[0].exercises[0].sets.every((s) => s.done));
+});
+
+test('"3x 20" ohne kg sind drei Sätze, und das wird gemeldet', () => {
+  const { workouts, warnings } = parseWorkoutText(`21.05.2026
+Beine hoch
+3x 20`);
+
+  const ex = workouts[0].exercises[0];
+  assert.equal(ex.sets.length, 3);
+  assert.deepEqual(ex.sets.map((s) => [s.weight, s.reps]), [[0, 20], [0, 20], [0, 20]]);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /3 × 20 Wiederholungen ohne Gewicht/);
+});
+
+test('"80x12" bleibt Gewicht mal Wiederholungen', () => {
+  const { workouts } = parseWorkoutText(`21.05.2026
+Beinpresse 80x12, 90x10`);
+
+  assert.deepEqual(workouts[0].exercises[0].sets.map((s) => [s.weight, s.reps]),
+    [[80, 12], [90, 10]], 'große erste Zahl bleibt das Gewicht');
+});

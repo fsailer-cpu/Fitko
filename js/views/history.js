@@ -8,7 +8,8 @@ import {
 
 function workoutCard(w) {
   const { total, done } = workoutSetCount(w);
-  const volume = workoutVolume(w);
+  // Nur erledigte Sätze – wie in der Zusammenfassung im Training selbst.
+  const volume = workoutVolume(w, true);
   return h('a.card.card--tap', { href: `#/training/${w.id}` },
     h('div.row.row--between',
       h('div.grow',
@@ -51,7 +52,7 @@ export function render() {
   }
 
   if (finished.length) {
-    const total = finished.reduce((sum, w) => sum + workoutVolume(w, false), 0);
+    const total = finished.reduce((sum, w) => sum + workoutVolume(w, true), 0);
     body.append(
       h('div.section-title', `Verlauf · ${finished.length} Trainings`),
       h('div.card.small.dim',

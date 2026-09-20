@@ -116,8 +116,21 @@ Die Regeln:
 - Eine Zeile wie `45 kg x 15` ist ein **Satz** der zuletzt genannten Übung.
 - Ein **nachgestelltes `-` oder `+`** ist die Beurteilung des Satzes:
   `-` heißt am Limit, `+` heißt noch Reserven.
-- Steht statt der Wiederholungen eine **Zeit** (`85 kg x 01:30`, `01:45` oder
-  `90 s`), wird die Übung als Halteübung geführt. Auch `3 x 01:30 @ 85` geht.
+- Steht statt der Wiederholungen eine **Zeit** (`85 kg x 01:30`, `1:20 x 3`,
+  `01:45` oder `90 s`), wird die Übung als Halteübung geführt.
+- Ein Datum **ohne Jahr** (`28.05.`) erbt das Jahr der letzten vollständigen
+  Angabe; wird der Monat kleiner, liegt ein Jahreswechsel dazwischen.
+- **Dezimalkommas** (`17,5 kg x 15`) werden nicht mit dem Satztrenner
+  verwechselt.
+- Ein **`o`** hinter dem Satz heißt: gemacht, aber ohne Wertung.
+- Eine **Bemerkung hinter dem Satz** (`40 kg x 8 - 45 kg zuvor`) geht nicht
+  verloren, sondern landet in der Notiz des Trainings.
+- **`nein` hinter dem Übungsnamen** heißt: stand im Plan, wurde nicht gemacht.
+  Die Übung wird unter dem normalen Namen geführt, ihre Sätze bleiben aber
+  unabgehakt und zählen nicht ins Volumen.
+- `3x 20` ohne kg-Angabe sind drei Sätze à 20 Wiederholungen mit Körpergewicht;
+  `80x12` bleibt dagegen 80 kg mit 12 Wiederholungen. Die Deutung wird nach dem
+  Import als Hinweis aufgelistet.
 - Leerzeilen trennen nur optisch und werden übersprungen.
 
 Zusätzlich verstanden, weil verbreitet: `Beinpresse 80x12, 80x12, 90x10` (Name

@@ -28,6 +28,29 @@ const DATE_ISO = /^(\d{4})-(\d{1,2})-(\d{1,2})\s*$|^(\d{4})-(\d{1,2})-(\d{1,2})\
 const pad = (n) => String(n).padStart(2, '0');
 const num = (s) => Number(String(s).replace(',', '.'));
 
+// "28.05." – Tag und Monat ohne Jahr, wie in der Notiz üblich.
+const DATE_SHORT = /^(\d{1,2})\.(\d{1,2})\.\s*$|^(\d{1,2})\.(\d{1,2})\.\s+(.*)$/;
+
+/**
+ * Datumszeile ohne Jahr. Das Jahr kommt aus der zuletzt gelesenen
+ * vollständigen Datumsangabe; wird der Monat kleiner, ist ein Jahreswechsel
+ * dazwischen.
+ */
+function parseShortDate(line, prev) {
+  const m = DATE_SHORT.exec(line);
+  if (!m) return null;
+  const [d, mo, rest] = m[1] ? [m[1], m[2], ''] : [m[3], m[4], m[5] || ''];
+  const month = Number(mo);
+  let year = prev ? prev.year : new Date().getFullYear();
+  if (prev && month < prev.month) year += 1;
+  return {
+    iso: `${year}-${pad(mo)}-${pad(d)}`,
+    rest: rest.trim(),
+    year,
+    month,
+  };
+}
+
 /** Erkennt eine Datumszeile und trennt einen eventuellen Namen dahinter ab. */
 function parseDate(line) {
   let m = DATE_DE.exec(line);
@@ -50,9 +73,24 @@ function parseDate(line) {
  * aus – er wird gleich behandelt, weil das die Schreibweise der Notiz ist.
  */
 function splitEffort(text) {
-  const m = /^(.*?)\s*([-–—+])\s*$/.exec(text);
+  const m = /^(.*?)\s*([-–—+]|\bo)\s*$/i.exec(text);
   if (!m || !m[1].trim()) return { body: text.trim(), effort: null };
-  return { body: m[1].trim(), effort: m[2] === '+' ? 'reserve' : 'limit' };
+  if (m[2] === '+') return { body: m[1].trim(), effort: 'reserve' };
+  // "o" markiert den Satz als gelaufen, aber ohne Wertung.
+  if (/^o$/i.test(m[2])) return { body: m[1].trim(), effort: null };
+  return { body: m[1].trim(), effort: 'limit' };
+}
+
+/**
+ * Manche Zeilen tragen hinter dem Satz noch eine Bemerkung
+ * ("40 kg x 8 - 45 kg zuvor"). Trennt den Satz vom Kommentar ab,
+ * damit weder der eine noch der andere verlorengeht.
+ */
+function splitComment(chunk) {
+  const m = /^(\d+(?:[.,]\d+)?\s*(?:kg)?\s*[x×*]\s*(?:\d{1,3}:[0-5]?\d|\d+))\s*[-–—]?\s+(\S.*)$/i
+    .exec(chunk);
+  if (!m) return { body: chunk, comment: '' };
+  return { body: m[1].trim(), comment: m[2].trim() };
 }
 
 /** Ein einzelner Satz-Ausdruck. Liefert null, wenn nichts passt. */
@@ -90,6 +128,16 @@ function parseSetChunk(chunk, effort = null) {
     }));
   }
 
+  // "1:20 x 3" – Haltedauer, dann Anzahl der Sätze
+  m = /^(\d{1,3}:[0-5]?\d)\s*[x×*]\s*(\d+)$/.exec(chunk);
+  if (m) {
+    const count = Math.min(20, Number(m[2]));
+    return Array.from({ length: count }, (_, i) => ({
+      id: uid(), weight: 0, reps: 0, seconds: parseSeconds(m[1]),
+      done: true, effort: i === count - 1 ? effort : null, timed: true,
+    }));
+  }
+
   // "01:30" oder "90 s" allein
   m = /^(\d{1,3}:[0-5]?\d)$/.exec(chunk) || /^(\d+)\s*(?:s|sek|sec)$/i.exec(chunk);
   if (m) {
@@ -97,6 +145,17 @@ function parseSetChunk(chunk, effort = null) {
       id: uid(), weight: 0, reps: 0,
       seconds: parseSeconds(m[1]), done: true, effort, timed: true,
     }];
+  }
+
+  // "3x 20" – ohne kg-Angabe und mit kleiner erster Zahl sind das
+  // drei Sätze à 20 Wiederholungen, nicht 3 kg für 20 Wiederholungen.
+  m = /^(\d{1,2})\s*[x×*]\s*(\d+)$/.exec(chunk);
+  if (m && Number(m[1]) <= 10 && Number(m[2]) >= 10) {
+    const count = Number(m[1]);
+    return Array.from({ length: count }, (_, i) => ({
+      id: uid(), weight: 0, reps: Number(m[2]), seconds: 0,
+      done: true, effort: i === count - 1 ? effort : null, guessed: chunk,
+    }));
   }
 
   // "45 kg x 15", "80x12", "80 × 12 Wdh"
@@ -122,21 +181,39 @@ function parseSetChunk(chunk, effort = null) {
 function parseSets(text) {
   const sets = [];
   const leftovers = [];
-  for (const part of text.split(/[,;]+/)) {
+  const comments = [];
+  // Nur an Kommas trennen, die NICHT zwischen zwei Ziffern stehen –
+  // sonst zerfällt "17,5 kg x 15" in "17" und "5 kg x 15".
+  for (const part of text.split(/(?<!\d)[;,]|[;,](?!\d)/)) {
     const raw = part.trim();
     if (!raw) continue;
     const { body, effort } = splitEffort(raw.replace(/\s+/g, ' '));
     const chunk = body.trim();
     if (!chunk) continue;
-    const parsed = parseSetChunk(chunk, effort);
-    if (parsed) sets.push(...parsed);
-    else leftovers.push(raw);
+
+    let parsed = parseSetChunk(chunk, effort);
+    if (parsed) {
+      sets.push(...parsed);
+      continue;
+    }
+
+    // Zweiter Versuch: Satz plus nachgestellte Bemerkung.
+    const split = splitComment(chunk);
+    if (split.comment) {
+      parsed = parseSetChunk(split.body, effort);
+      if (parsed) {
+        sets.push(...parsed);
+        comments.push(split.comment);
+        continue;
+      }
+    }
+    leftovers.push(raw);
   }
-  return { sets, leftovers };
+  return { sets, leftovers, comments };
 }
 
 /** Entscheidet, was eine Zeile ist: Datum, Satz, Übungsname oder Notiz. */
-function classify(line) {
+function classify(line, lastDate = null) {
   if (/^#\s*notiz\s*:/i.test(line)) {
     return { kind: 'note', text: line.replace(/^#\s*notiz\s*:\s*/i, '').trim() };
   }
@@ -145,23 +222,44 @@ function classify(line) {
   if (!bare) return { kind: 'blank' };
 
   const date = parseDate(bare);
-  if (date) return { kind: 'date', iso: date.iso, name: date.rest };
+  if (date) {
+    const [y, mo] = date.iso.split('-');
+    return { kind: 'date', iso: date.iso, name: date.rest, year: Number(y), month: Number(mo) };
+  }
+
+  const short = parseShortDate(bare, lastDate);
+  if (short) {
+    return {
+      kind: 'date', iso: short.iso, name: short.rest, year: short.year, month: short.month,
+    };
+  }
 
   // Beginnt die Zeile mit einer Zahl, ist sie ein Satz – nicht ein Name.
   if (/^\d/.test(bare)) {
-    const { sets, leftovers } = parseSets(bare);
-    if (sets.length) return { kind: 'sets', sets, leftovers };
+    const { sets, leftovers, comments } = parseSets(bare);
+    if (sets.length) return { kind: 'sets', sets, leftovers, comments };
   }
 
   // Name gefolgt von Sätzen in derselben Zeile.
   const idx = bare.search(/\d/);
   if (idx > 0) {
     const name = bare.slice(0, idx).trim().replace(/[:\-–]\s*$/, '').trim();
-    const { sets, leftovers } = parseSets(bare.slice(idx));
-    if (name && sets.length) return { kind: 'exercise', name, sets, leftovers };
+    const { sets, leftovers, comments } = parseSets(bare.slice(idx));
+    if (name && sets.length) return { kind: 'exercise', name, sets, leftovers, comments };
   }
 
-  return { kind: 'exercise', name: bare, sets: [], leftovers: [] };
+  return { kind: 'exercise', name: bare, sets: [], leftovers: [], comments: [] };
+}
+
+/**
+ * Ein "nein" hinter dem Übungsnamen heißt: stand im Plan, wurde aber nicht
+ * gemacht. Der Name wird bereinigt, damit es dieselbe Maschine bleibt wie
+ * ohne den Zusatz; die Sätze bleiben unabgehakt und zählen nicht mit.
+ */
+function splitSkipped(name) {
+  const m = /^(.*?)\s+nein\s*$/i.exec(name);
+  if (!m || !m[1].trim()) return { name: name.trim(), skipped: false };
+  return { name: m[1].trim(), skipped: true };
 }
 
 function newWorkout(name, date) {
@@ -190,10 +288,7 @@ export function parseWorkoutText(text) {
   const warnings = [];
 
   // Zeilen vor dem ersten Datum sind der Titel der Datei, kein Training.
-  const firstDate = lines.findIndex((l) => {
-    const c = classify(l.trim());
-    return c.kind === 'date';
-  });
+  const firstDate = lines.findIndex((l) => classify(l.trim()).kind === 'date');
   let title = '';
   if (firstDate > 0) {
     title = lines.slice(0, firstDate).map((l) => l.trim()).filter(Boolean).join(' ').trim();
@@ -201,6 +296,14 @@ export function parseWorkoutText(text) {
 
   let workout = null;
   let exercise = null;
+  // Stand des zuletzt gelesenen Datums, damit "28.05." sein Jahr erbt.
+  let lastDate = null;
+
+  const addComments = (list, name) => {
+    if (!list?.length) return;
+    const text = `${name}: ${list.join(' / ')}`;
+    workout.note = workout.note ? `${workout.note}\n${text}` : text;
+  };
 
   const ensureWorkout = () => {
     if (!workout) {
@@ -215,7 +318,7 @@ export function parseWorkoutText(text) {
     const line = rawLine.trim();
     if (!line) return;
 
-    const item = classify(line);
+    const item = classify(line, lastDate);
     const where = `Zeile ${i + 1}`;
 
     switch (item.kind) {
@@ -223,6 +326,7 @@ export function parseWorkoutText(text) {
         return;
 
       case 'date':
+        lastDate = { year: item.year, month: item.month };
         workout = newWorkout(item.name || title, item.iso);
         workouts.push(workout);
         exercise = null;
@@ -241,6 +345,7 @@ export function parseWorkoutText(text) {
           workout.exercises.push(exercise);
         }
         exercise.sets.push(...item.sets);
+        addComments(item.comments, exercise.name);
         if (item.leftovers.length) {
           warnings.push(`${where}: nicht verstanden – ${item.leftovers.join(' / ')}`);
         }
@@ -250,8 +355,12 @@ export function parseWorkoutText(text) {
       case 'exercise':
       default: {
         ensureWorkout();
-        exercise = { id: uid(), name: item.name, note: '', sets: [...(item.sets || [])] };
+        const { name, skipped } = splitSkipped(item.name);
+        exercise = {
+          id: uid(), name, skipped, note: '', sets: [...(item.sets || [])],
+        };
         workout.exercises.push(exercise);
+        addComments(item.comments, exercise.name);
         if (item.leftovers?.length) {
           warnings.push(`${where}: nicht verstanden – ${item.leftovers.join(' / ')}`);
         }
@@ -268,10 +377,19 @@ export function parseWorkoutText(text) {
       }
       // Eine Übung gilt als Halteübung, sobald ein Satz eine Zeit trägt.
       ex.kind = ex.sets.some((set) => set.timed) ? 'time' : 'reps';
+      // Eine gedeutete Zeile wird einmal je Übung gemeldet, nicht je Satz.
+      const guessed = ex.sets.find((set) => set.guessed);
+      if (guessed) {
+        warnings.push(`„${ex.name}“: „${guessed.guessed}“ gelesen als `
+          + `${ex.sets.length} × ${guessed.reps} Wiederholungen ohne Gewicht`);
+      }
       ex.sets.forEach((set) => {
         set.seconds = Number(set.seconds) || 0;
+        if (ex.skipped) set.done = false;
+        delete set.guessed;
         delete set.timed;
       });
+      delete ex.skipped;
     });
   });
 

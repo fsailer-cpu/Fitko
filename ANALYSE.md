@@ -181,7 +181,9 @@ Zwei Ebenen, beide über `npm test`:
 - `tests/textio.test.mjs` prüft den Parser gegen die reale Trainingsnotiz:
   Titelzeile, Datum, sechs Übungen mit ihren Sätzen, nachgestellte Striche,
   mehrere Trainings in einer Datei, Übungsnamen die mit einer Zahl beginnen,
-  die Beurteilungen `-` und `+`, und den Rundlauf Export → Import. 15 Tests.
+  die Beurteilungen `-` und `+`, den Rundlauf Export → Import und die
+  Eigenheiten der über Monate gewachsenen Notiz: Dezimalkommas, Datumszeilen
+  ohne Jahr, Bemerkungen hinter dem Satz, ausgelassene Übungen. 24 Tests.
 - `tests/time.test.mjs` prüft die Halteübungen: mm:ss lesen und schreiben,
   dass Zeit nicht ins kg-Volumen fließt, die Haltezeit-Summen, und dass ein
   Datum nicht als Zeitangabe missverstanden wird. 9 Tests.
